@@ -48,17 +48,13 @@ function Run-ExternalScript {
                         $listBox.Items[0] = $msg
                     }
                 } elseif ($line -like "RESULT:*") {
-                    # メッセージボックス用に保存
                     $finalResult = $line -replace "RESULT:", ""
-                    # 【重要】リストボックスの最後に追加し、強制描画
                     $null = $listBox.Items.Add($line)
                 } else {
                     $null = $listBox.Items.Add($line)
                 }
                 
-                # 自動スクロール（常に最新行を表示）
                 $listBox.TopIndex = $listBox.Items.Count - 1
-                # 強制再描画
                 $listBox.Refresh()
             }
             [System.Windows.Forms.Application]::DoEvents()
@@ -117,6 +113,34 @@ $form.Controls.Add($clearButton)
 $listBox = New-Object Windows.Forms.ListBox
 $listBox.Location = New-Object Drawing.Point(10, 140); $listBox.Size = New-Object Drawing.Size(610, 250)
 $form.Controls.Add($listBox)
+
+# ===============================
+# 【新規機能】ダブルクリックでファイルを開く
+# ===============================
+$listBox.Add_MouseDoubleClick({
+    if ($listBox.SelectedItem -eq $null) { return }
+    
+    $selectedLine = $listBox.SelectedItem.ToString()
+    
+    # 行から名前部分を抽出（例: "テスト01 : 差分..." -> "テスト01"）
+    if ($selectedLine -match "^(.+?)\s*:") {
+        $personName = $matches[1].Trim()
+        
+        # フォルダ1（日報）から該当ファイルを探す
+        $targetFile = Get-ChildItem -Path $textBox1.Text -Filter "*$personName*.xlsx" | Select-Object -First 1
+        
+        if ($targetFile -ne $null) {
+            try {
+                # 既定のプログラム（Excel）でファイルを開く
+                Start-Process $targetFile.FullName
+            } catch {
+                [System.Windows.Forms.MessageBox]::Show("ファイルを開けませんでした。`n$($_.Exception.Message)")
+            }
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("ファイルが見つかりませんでした: $personName")
+        }
+    }
+})
 
 # ===============================
 # イベント割り当て
