@@ -39,7 +39,8 @@ function Run-ExternalScript {
     if ($process.Start()) {
         while (-not $process.StandardOutput.EndOfStream) {
             $line = $process.StandardOutput.ReadLine()
-            if ($null -ne $line) {
+            if ($null -ne $line -and ![string]::IsNullOrWhiteSpace($line)) {
+                
                 if ($line -like "PROGRESS:*") {
                     $msg = $line -replace "PROGRESS:", ""
                     if ($listBox.Items.Count -eq 0) {
@@ -51,7 +52,21 @@ function Run-ExternalScript {
                     $finalResult = $line -replace "RESULT:", ""
                     $null = $listBox.Items.Add($line)
                 } else {
-                    $null = $listBox.Items.Add($line)
+                    # --- フィルタリングロジックの強化 ---
+                    # 1. まず「差分」と「禁則」の数値部分を抽出
+                    if ($line -match "差分\s+(\d+)\s+件\s+/\s+禁則\s+(\d+)\s+件") {
+                        $diffCount = [int]$matches[1]
+                        $fbdCount = [int]$matches[2]
+
+                        # どちらかが1件以上の場合のみリストに追加
+                        if ($diffCount -gt 0 -or $fbdCount -gt 0) {
+                            $null = $listBox.Items.Add($line)
+                        }
+                    } 
+                    # 2. それ以外のエラーメッセージなどは念のため表示
+                    elseif ($line -like "ERROR:*") {
+                        $null = $listBox.Items.Add($line)
+                    }
                 }
                 
                 $listBox.TopIndex = $listBox.Items.Count - 1
@@ -115,29 +130,20 @@ $listBox.Location = New-Object Drawing.Point(10, 140); $listBox.Size = New-Objec
 $form.Controls.Add($listBox)
 
 # ===============================
-# 【新規機能】ダブルクリックでファイルを開く
+# ダブルクリックでファイルを開く
 # ===============================
 $listBox.Add_MouseDoubleClick({
     if ($listBox.SelectedItem -eq $null) { return }
-    
     $selectedLine = $listBox.SelectedItem.ToString()
-    
-    # 行から名前部分を抽出（例: "テスト01 : 差分..." -> "テスト01"）
     if ($selectedLine -match "^(.+?)\s*:") {
         $personName = $matches[1].Trim()
-        
-        # フォルダ1（日報）から該当ファイルを探す
         $targetFile = Get-ChildItem -Path $textBox1.Text -Filter "*$personName*.xlsx" | Select-Object -First 1
-        
         if ($targetFile -ne $null) {
             try {
-                # 既定のプログラム（Excel）でファイルを開く
                 Start-Process $targetFile.FullName
             } catch {
-                [System.Windows.Forms.MessageBox]::Show("ファイルを開けませんでした。`n$($_.Exception.Message)")
+                [System.Windows.Forms.MessageBox]::Show("ファイルを開けませんでした。")
             }
-        } else {
-            [System.Windows.Forms.MessageBox]::Show("ファイルが見つかりませんでした: $personName")
         }
     }
 })
